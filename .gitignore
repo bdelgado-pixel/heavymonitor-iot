@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+.env
+*.tsbuildinfo
+secrets/
+backups/
+ACCESO-LOCAL.txt
+data/
+*.log
+.env.production
+out/

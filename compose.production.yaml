@@ -1,0 +1,79 @@
+name: heavymonitor-production
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: heavymonitor
+      POSTGRES_USER: heavymonitor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Requerido}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./database/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heavymonitor"]
+      interval: 5s
+      retries: 20
+    networks: [private]
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      PORT: 4000
+      DATABASE_URL: postgresql://heavymonitor:${POSTGRES_PASSWORD:?Requerido}@postgres:5432/heavymonitor
+      APP_ORIGIN: https://${DOMAIN:?Requerido}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Requerido}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Requerido}
+      SIMULATION: "false"
+      MQTT_URL: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on: [api]
+    networks: [private]
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?Requerido}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web,api]
+    networks: [private,egress]
+  backup:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: heavymonitor
+      PGDATABASE: heavymonitor
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Requerido}
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+networks:
+  private:
+    internal: true
+  egress:
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

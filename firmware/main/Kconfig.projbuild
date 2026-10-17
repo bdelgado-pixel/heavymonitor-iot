@@ -1,0 +1,32 @@
+menu "HeavyMonitor IoT"
+config HM_WIFI_SSID
+ string "SSID Wi-Fi"
+ default ""
+config HM_WIFI_PASSWORD
+ string "Contraseña Wi-Fi"
+ default ""
+config HM_DEVICE_ID
+ string "ID del dispositivo registrado"
+ default "ESP32-CF-001"
+config HM_DEVICE_TOKEN
+ string "Credencial privada individual"
+ default ""
+config HM_ENDPOINT
+ string "URL HTTPS del servidor (sin barra final)"
+ default "https://monitor.ejemplo.com"
+config HM_SD_CS
+ int "GPIO CS de microSD (confirmar cableado)"
+ default 5
+config HM_SD_MOSI
+ int "GPIO MOSI de microSD"
+ default 23
+config HM_SD_MISO
+ int "GPIO MISO de microSD"
+ default 19
+config HM_SD_CLK
+ int "GPIO CLK de microSD"
+ default 18
+config HM_SIMULATION
+ bool "Generar datos de demostración identificados como simulados"
+ default n
+endmenu

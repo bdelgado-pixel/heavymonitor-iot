@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/dist
+**/out
+**/.env
+.env*
+**/.env*
+ACCESO-LOCAL.txt
+backups
+secrets
+.git
+*.log

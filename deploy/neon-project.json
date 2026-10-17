@@ -1,0 +1,10 @@
+{
+  "project_id": "still-block-51029452",
+  "name": "HeavyMonitor IoT - pruebas",
+  "region": "aws-us-west-2",
+  "postgres_version": 17,
+  "database_name": "heavymonitor",
+  "role_name": "heavymonitor_owner",
+  "console_url": "https://console.neon.tech/app/projects/still-block-51029452",
+  "deployment_status": "Database provisioned; web deployment pending GitHub and Render connection. No secrets stored here."
+}

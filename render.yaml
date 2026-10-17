@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: heavymonitor-iot
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=256
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: SERVE_WEB
+        value: "true"
+      - key: SIMULATION
+        value: "false"
+      - key: MQTT_URL
+        value: ""
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        generateValue: true

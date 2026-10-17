@@ -1,0 +1,46 @@
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <cmath>
+#include <ctime>
+#include <dirent.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_sntp.h"
+#include "nvs_flash.h"
+#include "esp_http_client.h"
+#include "esp_crt_bundle.h"
+#include "esp_random.h"
+#include "esp_log.h"
+#include "esp_vfs_fat.h"
+#include "driver/spi_master.h"
+#include "sdmmc_cmd.h"
+#include "cJSON.h"
+#include "sensors.h"
+static const char *TAG="HeavyMonitor";static bool sd_ok=false;static unsigned interval_ms=2000;static SemaphoreHandle_t files_lock;
+extern "C" __attribute__((weak)) esp_err_t hm_read_sensors(hm_sample*){return ESP_ERR_NOT_SUPPORTED;}
+static void uuid(char out[37]){uint8_t b[16];esp_fill_random(b,sizeof b);b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;snprintf(out,37,"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],b[8],b[9],b[10],b[11],b[12],b[13],b[14],b[15]);}
+static esp_err_t response_event(esp_http_client_event_t *e){if(e->event_id==HTTP_EVENT_ON_DATA){auto *body=static_cast<std::string*>(e->user_data);if(body->size()+e->data_len>4096)return ESP_FAIL;body->append(static_cast<char*>(e->data),e->data_len);}return ESP_OK;}
+static bool post(const char *route,const std::string &payload,std::string &response){if(strncmp(CONFIG_HM_ENDPOINT,"https://",8)!=0||strlen(CONFIG_HM_DEVICE_TOKEN)<32)return false;std::string url=std::string(CONFIG_HM_ENDPOINT)+route,authorization=std::string("Bearer ")+CONFIG_HM_DEVICE_TOKEN;esp_http_client_config_t cfg={};cfg.url=url.c_str();cfg.crt_bundle_attach=esp_crt_bundle_attach;cfg.timeout_ms=10000;cfg.event_handler=response_event;cfg.user_data=&response;cfg.disable_auto_redirect=true;auto client=esp_http_client_init(&cfg);if(!client)return false;esp_http_client_set_method(client,HTTP_METHOD_POST);esp_http_client_set_header(client,"Content-Type","application/json");esp_http_client_set_header(client,"Authorization",authorization.c_str());esp_http_client_set_post_field(client,payload.c_str(),payload.size());const auto result=esp_http_client_perform(client);const int code=esp_http_client_get_status_code(client);esp_http_client_cleanup(client);return result==ESP_OK&&(code==200||code==201);}
+static void mount_sd(){sdmmc_host_t host=SDSPI_HOST_DEFAULT();spi_bus_config_t bus={};bus.mosi_io_num=CONFIG_HM_SD_MOSI;bus.miso_io_num=CONFIG_HM_SD_MISO;bus.sclk_io_num=CONFIG_HM_SD_CLK;bus.quadwp_io_num=-1;bus.quadhd_io_num=-1;bus.max_transfer_sz=4096;if(spi_bus_initialize(static_cast<spi_host_device_t>(host.slot),&bus,SPI_DMA_CH_AUTO)!=ESP_OK)return;sdspi_device_config_t slot=SDSPI_DEVICE_CONFIG_DEFAULT();slot.gpio_cs=static_cast<gpio_num_t>(CONFIG_HM_SD_CS);slot.host_id=static_cast<spi_host_device_t>(host.slot);esp_vfs_fat_sdmmc_mount_config_t config={};config.format_if_mount_failed=false;config.max_files=5;config.allocation_unit_size=16*1024;sdmmc_card_t *card=nullptr;if(esp_vfs_fat_sdspi_mount("/sdcard",&host,&slot,&config,&card)!=ESP_OK)return;mkdir("/sdcard/queue",0770);sd_ok=true;}
+static void acquire(){xSemaphoreTake(files_lock,portMAX_DELAY);}static void release(){xSemaphoreGive(files_lock);}
+static std::string next_file(){std::string result;acquire();DIR *dir=opendir("/sdcard/queue");if(dir){dirent *entry;while((entry=readdir(dir))){std::string n=entry->d_name;if(n.size()>5&&n.substr(n.size()-5)==".json"){result="/sdcard/queue/"+n;break;}}closedir(dir);}release();return result;}
+static bool enqueue(const char *id,const char *json){if(!sd_ok)return false;acquire();size_t count=0;DIR *dir=opendir("/sdcard/queue");if(dir){while(readdir(dir))count++;closedir(dir);}if(count>=10000){release();ESP_LOGE(TAG,"Cola llena: datos previos conservados. Requiere inspección.");return false;}std::string final=std::string("/sdcard/queue/")+id+".json",temporary=final+".tmp";FILE *f=fopen(temporary.c_str(),"wb");bool ok=false;if(f){size_t n=strlen(json);ok=fwrite(json,1,n,f)==n&&fflush(f)==0&&fsync(fileno(f))==0;fclose(f);if(ok)ok=rename(temporary.c_str(),final.c_str())==0;}release();return ok;}
+static void recover_temporary(){acquire();DIR *dir=opendir("/sdcard/queue");if(dir){dirent *entry;while((entry=readdir(dir))){std::string name=entry->d_name;if(name.size()<9||name.substr(name.size()-4)!=".tmp")continue;std::string file="/sdcard/queue/"+name;char b[2048]={};FILE *f=fopen(file.c_str(),"rb");if(!f)continue;size_t n=fread(b,1,sizeof(b)-1,f);fclose(f);cJSON *json=cJSON_ParseWithLength(b,n);if(json){rename(file.c_str(),file.substr(0,file.size()-4).c_str());cJSON_Delete(json);}else ESP_LOGE(TAG,"Registro incompleto conservado para revisión: %s",name.c_str());}closedir(dir);}release();}
+static void sampler(void*){for(;;){time_t now=time(nullptr);if(now>1704067200){hm_sample s={};esp_err_t result=hm_read_sensors(&s);
+#ifdef CONFIG_HM_SIMULATION
+s.temperature_c=58.7;s.vibration_rms_ms2=2.3;s.vibration_x=1.2;s.vibration_y=1.8;s.vibration_z=1.5;s.pressure_bar=210;s.rpm=1450;s.has_axes=true;s.has_pressure=true;s.has_rpm=true;s.operating=true;s.sensors_ok=true;result=ESP_OK;
+#endif
+if(result==ESP_OK&&std::isfinite(s.temperature_c)&&std::isfinite(s.vibration_rms_ms2)){char id[37],timestamp[32];uuid(id);tm utc;gmtime_r(&now,&utc);strftime(timestamp,sizeof timestamp,"%Y-%m-%dT%H:%M:%SZ",&utc);cJSON *json=cJSON_CreateObject();cJSON_AddStringToObject(json,"id",id);cJSON_AddStringToObject(json,"device_id",CONFIG_HM_DEVICE_ID);cJSON_AddStringToObject(json,"measured_at",timestamp);cJSON_AddNumberToObject(json,"temperature_c",s.temperature_c);cJSON_AddNumberToObject(json,"vibration_rms_ms2",s.vibration_rms_ms2);if(s.has_axes){cJSON_AddNumberToObject(json,"vibration_x",s.vibration_x);cJSON_AddNumberToObject(json,"vibration_y",s.vibration_y);cJSON_AddNumberToObject(json,"vibration_z",s.vibration_z);}if(s.has_pressure)cJSON_AddNumberToObject(json,"pressure_bar",s.pressure_bar);if(s.has_rpm)cJSON_AddNumberToObject(json,"rpm",s.rpm);cJSON_AddBoolToObject(json,"operating",s.operating);cJSON_AddBoolToObject(json,"sensors_ok",s.sensors_ok);cJSON_AddBoolToObject(json,"storage_ok",sd_ok);
+#ifdef CONFIG_HM_SIMULATION
+cJSON_AddBoolToObject(json,"simulated",true);
+#endif
+char *text=cJSON_PrintUnformatted(json);if(text){if(!enqueue(id,text))ESP_LOGE(TAG,"No se pudo guardar medición; revisar microSD");free(text);}cJSON_Delete(json);}else ESP_LOGW(TAG,"Sin adaptador de sensores válido; no se generan mediciones reales.");}vTaskDelay(pdMS_TO_TICKS(interval_ms));}}
+static void uploader(void*){unsigned backoff=1000;for(;;){wifi_ap_record_t ap={};if(esp_wifi_sta_get_ap_info(&ap)!=ESP_OK){esp_wifi_connect();vTaskDelay(pdMS_TO_TICKS(5000));continue;}std::string reply;const std::string beat=std::string("{\"device_id\":\"")+CONFIG_HM_DEVICE_ID+"\"}";if(post("/api/device/heartbeat",beat,reply)){cJSON *json=cJSON_Parse(reply.c_str());if(json){auto value=cJSON_GetObjectItemCaseSensitive(json,"interval_ms");if(cJSON_IsNumber(value)&&value->valueint>=500&&value->valueint<=300000)interval_ms=value->valueint;cJSON_Delete(json);}}std::string file=next_file();if(file.empty()){vTaskDelay(pdMS_TO_TICKS(2000));continue;}char buffer[2048]={};acquire();FILE *f=fopen(file.c_str(),"rb");size_t n=f?fread(buffer,1,sizeof(buffer)-1,f):0;if(f)fclose(f);release();cJSON *original=cJSON_ParseWithLength(buffer,n);if(!original){ESP_LOGE(TAG,"Registro corrupto conservado: requiere revisión");vTaskDelay(pdMS_TO_TICKS(10000));continue;}auto id=cJSON_GetObjectItemCaseSensitive(original,"id");reply.clear();bool ok=post("/api/measurements",std::string(buffer,n),reply);cJSON *ack=ok?cJSON_Parse(reply.c_str()):nullptr;auto persisted=ack?cJSON_GetObjectItemCaseSensitive(ack,"persisted"):nullptr;auto ack_id=ack?cJSON_GetObjectItemCaseSensitive(ack,"id"):nullptr;if(cJSON_IsTrue(persisted)&&cJSON_IsString(id)&&cJSON_IsString(ack_id)&&strcmp(id->valuestring,ack_id->valuestring)==0){acquire();unlink(file.c_str());release();backoff=1000;}else{ESP_LOGW(TAG,"Sin acuse persistente: medición conservada para reintento");vTaskDelay(pdMS_TO_TICKS(backoff));backoff=backoff<30000?backoff*2:60000;}cJSON_Delete(original);if(ack)cJSON_Delete(ack);vTaskDelay(pdMS_TO_TICKS(100));}}
+extern "C" void app_main(){ESP_ERROR_CHECK(nvs_flash_init());ESP_ERROR_CHECK(esp_netif_init());ESP_ERROR_CHECK(esp_event_loop_create_default());esp_netif_create_default_wifi_sta();wifi_init_config_t cfg=WIFI_INIT_CONFIG_DEFAULT();ESP_ERROR_CHECK(esp_wifi_init(&cfg));wifi_config_t wifi={};strlcpy(reinterpret_cast<char*>(wifi.sta.ssid),CONFIG_HM_WIFI_SSID,sizeof wifi.sta.ssid);strlcpy(reinterpret_cast<char*>(wifi.sta.password),CONFIG_HM_WIFI_PASSWORD,sizeof wifi.sta.password);ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA,&wifi));ESP_ERROR_CHECK(esp_wifi_start());esp_wifi_connect();esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);esp_sntp_setservername(0,"pool.ntp.org");esp_sntp_init();files_lock=xSemaphoreCreateMutex();mount_sd();if(!sd_ok){ESP_LOGE(TAG,"microSD no disponible; revisar almacenamiento");}else recover_temporary();xTaskCreate(sampler,"hm_sample",6144,nullptr,5,nullptr);xTaskCreate(uploader,"hm_upload",12288,nullptr,4,nullptr);}
