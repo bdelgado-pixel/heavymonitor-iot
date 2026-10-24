@@ -37,3 +37,11 @@ Ejecutar `npm run check`, `npm run build` y `node test-integration.cjs` con una 
 Para publicar, subir los archivos modificados al repositorio GitHub conectado a Render. La primera puesta en marcha aplica la migración automáticamente. Revisar el despliegue y `/api/health` antes de usar la versión ampliada. Conservar un respaldo de la base antes de actualizar una instalación con datos importantes.
 
 El firmware incluye las estructuras y la serialización del protocolo ampliado. El adaptador `hm_read_sensors` debe implementar los sensores reales. No se ha validado este firmware en una placa física y no se entrega un binario calibrado para equipos desconocidos.
+
+## Lecturas a frecuencias distintas
+
+El dashboard conserva el último valor reportado de cada variable y la fecha de su medición. Una lectura GPS o de gases no elimina temperatura, vibración, horas ni nivel recibidos antes. Los gases mantienen su última lectura de forma independiente por especie y unidad. Si el GPS reporta explícitamente pérdida de señal, ese estado sustituye a la posición válida anterior; el recorrido queda identificado como histórico.
+
+Las alertas comparan la antigüedad por variable y fuente. Una lectura térmica reciente puede generar una alerta aunque ya haya llegado un GPS medido unos milisegundos después. El backfill más antiguo de esa misma variable no reemplaza su condición actual. Las tendencias seleccionan muestras no nulas de cada variable antes de aplicar la ventana configurada.
+
+Prueba adicional: `node test-telemetry-view.cjs` (Node.js 24).

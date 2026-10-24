@@ -1,5 +1,5 @@
 import {Pool} from 'pg';
-export async function migrate(pool:Pool){const db=await pool.connect();try{await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(78210411)");await db.query(`
+export async function migrate(pool:Pool){const db=await pool.connect();try{await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(78210411)");const needsSnapshot=!(await db.query("SELECT to_regclass('public.latest_measurement_values') AS existing")).rows[0].existing;await db.query(`
 ALTER TABLE measurements ALTER COLUMN temperature_c DROP NOT NULL;
 ALTER TABLE measurements ALTER COLUMN vibration_rms_ms2 DROP NOT NULL;
 ALTER TABLE measurements ADD COLUMN IF NOT EXISTS operating_hours double precision;
@@ -53,6 +53,14 @@ ALTER TABLE app_users ADD COLUMN IF NOT EXISTS enabled boolean NOT NULL DEFAULT 
 ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS evidence_notes text;
 CREATE TABLE IF NOT EXISTS audit_log(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,user_id uuid,action text NOT NULL,target text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS device_errors(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,device_id text,reason text NOT NULL,received_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS latest_measurement_values(device_id text NOT NULL REFERENCES devices(id),source text NOT NULL,variable text NOT NULL,measurement_id uuid NOT NULL REFERENCES measurements(id) ON DELETE CASCADE,measured_at timestamptz NOT NULL,PRIMARY KEY(device_id,source,variable));
 CREATE INDEX IF NOT EXISTS measurements_source_time ON measurements(device_id,source,measured_at DESC);
 CREATE INDEX IF NOT EXISTS active_alerts_component ON alerts(component_id) WHERE resolved_at IS NULL;
+`);if(needsSnapshot)await db.query(`
+INSERT INTO latest_measurement_values(device_id,source,variable,measurement_id,measured_at)
+SELECT DISTINCT ON(m.device_id,m.source,v.variable) m.device_id,m.source,v.variable,m.id,m.measured_at
+FROM measurements m CROSS JOIN LATERAL (
+ SELECT kv.key AS variable FROM jsonb_each(to_jsonb(m)) kv WHERE kv.key=ANY(ARRAY['id','temperature_c','vibration_rms_ms2','vibration_x','vibration_y','vibration_z','pressure_bar','rpm','operating_hours','hydraulic_level_pct','gps_fix','gps_latitude','gps_longitude','gps_altitude_m','gps_speed_kmh','gps_accuracy_m','gps_satellites','storage_ok','sensors_ok','operating']) AND kv.value<>'null'::jsonb
+ UNION ALL SELECT 'gas:'||(g->>'gas')||':'||(g->>'unit') FROM jsonb_array_elements(m.gas_readings) g
+) v ORDER BY m.device_id,m.source,v.variable,m.measured_at DESC,m.id DESC ON CONFLICT DO NOTHING;
 `);await db.query('COMMIT')}catch(e){await db.query('ROLLBACK');throw e}finally{db.release()}}
