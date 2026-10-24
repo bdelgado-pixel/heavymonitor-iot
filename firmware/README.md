@@ -22,3 +22,7 @@ No conectar señales industriales de presión/RPM directamente al ESP32: la inte
 Con Wi-Fi disponible: comprobar fuente "Simulador" durante demostración, acuses HTTPS y sincronización horaria. Cortar Wi-Fi sin apagar la placa: los archivos deben acumularse en microSD. Restaurar Wi-Fi: la cola debe reducirse, sin duplicados. Reiniciar mientras hay archivos pendientes y repetir. Verificar cola llena, tarjeta ausente, hora no sincronizada, token inválido y certificado no válido. No declarar validada recuperación ante pérdida de alimentación hasta ensayar con la tarjeta y alimentación reales.
 
 Referencias de Espressif: [cliente HTTPS y certificados](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/api-reference/protocols/esp_http_client.html), [almacenamiento FAT](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/fatfs.html).
+
+## Variables ampliadas
+
+El contrato `hm_sample` incorpora horómetro acumulado, nivel hidráulico %, hasta 16 gases y GPS. El adaptador debe activar explícitamente `has_temperature`, `has_vibration`, `has_operating_hours`, `has_hydraulic_level`, etc. únicamente cuando dispone de lecturas válidas. Para GPS activar `has_gps`; `gps_fix=false` informa pérdida de señal y omite coordenadas. El contador del horómetro se conserva en el dispositivo, no en función de la conexión web. Los nombres y unidades de gases siguen el protocolo v3. El firmware no incluye controladores de sensores aún no seleccionados. El modo de prueba sigue identificando todas sus lecturas como simuladas.

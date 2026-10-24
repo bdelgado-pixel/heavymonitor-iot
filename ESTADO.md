@@ -38,3 +38,7 @@
 - No se incluyen análisis espectral ni modelos avanzados: el documento original permite incorporarlos posteriormente.
 
 La aplicación está funcional para revisión local. No afirmar que está aceptada en producción antes de resolver y verificar estos puntos.
+
+## Ampliación del 24/10/2026
+
+Se incorporaron horómetro, nivel hidráulico, gases por especie/unidad y GPS al contrato de datos, migración aditiva, dashboard, historial, estadísticas, CSV/Excel/PDF, alertas configurables y estructuras del firmware. Ver AMPLIACION-MEDICIONES.md. La instalación publicada en Render debe actualizarse mediante el repositorio; la existencia de cambios locales no confirma un nuevo despliegue. Los sensores físicos continúan pendientes de selección e integración.

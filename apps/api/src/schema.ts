@@ -1,5 +1,21 @@
 import {Pool} from 'pg';
 export async function migrate(pool:Pool){const db=await pool.connect();try{await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(78210411)");await db.query(`
+ALTER TABLE measurements ALTER COLUMN temperature_c DROP NOT NULL;
+ALTER TABLE measurements ALTER COLUMN vibration_rms_ms2 DROP NOT NULL;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS operating_hours double precision;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS hydraulic_level_pct double precision;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS gas_readings jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS gps_fix boolean;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS gps_latitude double precision;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS gps_longitude double precision;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS gps_altitude_m double precision;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS gps_speed_kmh double precision;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS gps_accuracy_m double precision;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS gps_satellites integer;
+ALTER TABLE thresholds ADD COLUMN IF NOT EXISTS hydraulic_level_warning double precision;
+ALTER TABLE thresholds ADD COLUMN IF NOT EXISTS hydraulic_level_critical double precision;
+ALTER TABLE thresholds ADD COLUMN IF NOT EXISTS service_due_hours double precision;
+ALTER TABLE thresholds ADD COLUMN IF NOT EXISTS gas_limits jsonb NOT NULL DEFAULT '[]';
 ALTER TABLE measurements ADD COLUMN IF NOT EXISTS vibration_x double precision;
 ALTER TABLE measurements ADD COLUMN IF NOT EXISTS vibration_y double precision;
 ALTER TABLE measurements ADD COLUMN IF NOT EXISTS vibration_z double precision;

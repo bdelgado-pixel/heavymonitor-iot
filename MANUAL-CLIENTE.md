@@ -61,3 +61,11 @@ Para recuperar realmente después de una avería, primero guardar la base actual
 ## Aceptación final pendiente
 
 El código no sustituye una prueba en el servidor final y con los sensores elegidos. Verificar conexión física, calibración, corte de red, reinicio, recuperación de cola, permisos, respaldo externo, restauración, seguridad y capacidad con carga representativa antes de entregar como producción validada.
+
+## Horómetro, nivel hidráulico, gases y GPS
+
+El dashboard incorpora las ocho categorías. Horómetro muestra las horas totales reportadas por el dispositivo; nivel hidráulico muestra el porcentaje del depósito. Emisiones lista cada gas con su unidad y permite seleccionar su gráfica. GPS muestra latitud, longitud, señal y detalles de velocidad, altitud, precisión y satélites, más la trayectoria relativa reciente.
+
+En Configuración se pueden activar límites de nivel bajo, horas del próximo mantenimiento y advertencia/crítico para cada gas y unidad. Estos límites adicionales empiezan desactivados. En Historial y Reportes, pulsar Consultar para obtener las columnas y estadísticas del rango y descargar CSV, Excel o PDF. Si el equipo no envía una variable, aparece Sin datos. Sin señal GPS no se muestra una ubicación actual como válida.
+
+Consultar AMPLIACION-MEDICIONES.md y PROTOCOLO-ESP32.md para la conexión y el significado de los nuevos campos.

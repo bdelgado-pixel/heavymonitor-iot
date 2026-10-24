@@ -4,7 +4,7 @@ Plataforma de monitoreo de maquinaria: Next.js/React/TypeScript, NestJS, Postgre
 
 ## Funciones
 
-- Dashboard industrial adaptable con temperatura, vibración RMS/X/Y/Z, presión, RPM, gráficas, estados e historial de alarmas.
+- Dashboard industrial adaptable con temperatura, vibración RMS/X/Y/Z, presión, RPM, horómetro, nivel hidráulico, gases por especie/unidad y GPS con recorrido reciente, gráficas, estados e historial de alarmas.
 - Máquinas, componentes, dispositivos, umbrales de advertencia/crítico y línea base de operación normal.
 - Alarmas por variable, tendencias, almacenamiento/sensores reportados y pérdida de comunicación. No confunde anomalía con falla confirmada.
 - Usuarios con cuatro roles, sesiones, cambio/restablecimiento de contraseña, desactivación y registro de operaciones de usuarios.

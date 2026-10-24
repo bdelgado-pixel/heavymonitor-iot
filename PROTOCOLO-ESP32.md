@@ -1,4 +1,4 @@
-# Protocolo HeavyMonitor v2
+# Protocolo HeavyMonitor v3 (compatible con v2)
 
 ## Registro e identidad
 
@@ -27,7 +27,7 @@ Registrar máquina, componente y dispositivo desde la plataforma. El ID del disp
 }
 ```
 
-Temperatura y RMS son obligatorios en este protocolo; variables opcionales ausentes se guardan como null, nunca cero ficticio. X/Y/Z y RMS están en m/s²; presión en bar. RMS debe calcularse sobre una ventana definida por el firmware/sensor, no confundirse con aceleración instantánea. La hora incluye zona UTC o desplazamiento explícito. No se aceptan fechas anteriores a 2020 o más de cinco minutos adelantadas al servidor. La sincronización SNTP y, si se necesita arranque sin internet, un RTC físico deben validarse en el montaje.
+En v3 todas las variables de medición son opcionales; se requiere al menos una lectura válida o un estado GPS explícito. Los dispositivos v2 con temperatura y RMS siguen siendo compatibles. Las variables ausentes se guardan como null, nunca cero ficticio. X/Y/Z y RMS están en m/s²; presión en bar. RMS debe calcularse sobre una ventana definida por el firmware/sensor, no confundirse con aceleración instantánea. La hora incluye zona UTC o desplazamiento explícito. No se aceptan fechas anteriores a 2020 o más de cinco minutos adelantadas al servidor. La sincronización SNTP y, si se necesita arranque sin internet, un RTC físico deben validarse en el montaje.
 
 Respuesta después de COMMIT:
 
@@ -66,3 +66,31 @@ node simulator.cjs --flush-only --once
 ```
 
 Los datos de ese simulador se identifican mediante `simulated:true`. Los pendientes sobreviven al reinicio en `data/simulator-queue.sqlite`. Para ejecutar continuamente, omitir `--once`; finalizar con Ctrl+C. Es una prueba del contrato de comunicación, no de sensibilidad/calibración de sensores ni de robustez eléctrica.
+
+
+## Ampliación: horómetro, nivel hidráulico, gases y GPS
+
+Ejemplo de campos adicionales dentro del mismo JSON (conservar id, device_id y measured_at):
+
+```json
+{
+  "operating_hours": 1250.5,
+  "hydraulic_level_pct": 75,
+  "gas_readings": [
+    {"gas": "CO", "value": 12, "unit": "ppm"},
+    {"gas": "CO2", "value": 0.5, "unit": "%vol"},
+    {"gas": "NOX", "value": 25, "unit": "mg/m3"}
+  ],
+  "gps_fix": true,
+  "gps_latitude": -12.046374,
+  "gps_longitude": -77.042793,
+  "gps_altitude_m": 150,
+  "gps_speed_kmh": 12.5,
+  "gps_accuracy_m": 3,
+  "gps_satellites": 9
+}
+```
+
+Sin señal GPS: enviar `gps_fix:false` y omitir coordenadas, altitud, precisión y velocidad. Omitir variables sin sensor. Los gases deben enviarse en las unidades exactas del instrumento; no se infiere una tasa de emisiones a partir de ppm. No enviar gases duplicados con la misma unidad. Los reintentos mantienen los mismos valores, UUID y fecha.
+
+Los nuevos límites se configuran en la plataforma por componente. Consultar `AMPLIACION-MEDICIONES.md` para unidades, estadísticas, alertas y compatibilidad.
